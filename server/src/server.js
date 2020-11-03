@@ -1,7 +1,9 @@
 const fs = require('fs');
-const https = require('https');
+const https = require('http');
 const WebSocket = require('ws');
 const uuidv1 = require('uuid/v1');
+const express = require('express');
+const path = require('path');
 
 const config = require('./config');
 const FFmpeg = require('./ffmpeg');
@@ -9,29 +11,41 @@ const GStreamer = require('./gstreamer');
 const {
   initializeWorkers,
   createRouter,
-  createTransport
+  createTransport,
 } = require('./mediasoup');
 const Peer = require('./peer');
-const {
-  getPort,
-  releasePort
-} = require('./port');
+const { getPort, releasePort } = require('./port');
 
 const PROCESS_NAME = process.env.PROCESS_NAME || 'FFmpeg';
 const SERVER_PORT = process.env.SERVER_PORT || 3000;
 const HTTPS_OPTIONS = Object.freeze({
   cert: fs.readFileSync('./ssl/server.crt'),
-  key: fs.readFileSync('./ssl/server.key')
+  key: fs.readFileSync('./ssl/server.key'),
 });
 
-const httpsServer = https.createServer(HTTPS_OPTIONS);
-const wss = new WebSocket.Server({ server: httpsServer });
+// const httpsServer = https.createServer(HTTPS_OPTIONS);
+const app = express();
 const peers = new Map();
+
+app.use(express.static(path.join(__dirname, '../../app/dist')));
+
+//т.к. я использую browser-routing, то мне необходимо отправлять один и тот же документ на все запросы
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../app/dist/index.html'));
+});
+
+const server = app.listen(SERVER_PORT, () => {
+  console.log('Server listening on port %d', SERVER_PORT);
+});
+const wss = new WebSocket.Server({ server });
 
 let router;
 
 wss.on('connection', async (socket, request) => {
-  console.log('new socket connection [ip%s]', request.headers['x-forwared-for'] || request.headers.origin);
+  console.log(
+    'new socket connection [ip%s]',
+    request.headers['x-forwared-for'] || request.headers.origin
+  );
 
   try {
     const sessionId = uuidv1();
@@ -42,10 +56,10 @@ wss.on('connection', async (socket, request) => {
     const message = JSON.stringify({
       action: 'router-rtp-capabilities',
       routerRtpCapabilities: router.rtpCapabilities,
-      sessionId: peer.sessionId
+      sessionId: peer.sessionId,
     });
 
-    console.log('router.rtpCapabilities:', router.rtpCapabilities)
+    console.log('router.rtpCapabilities:', router.rtpCapabilities);
 
     socket.send(message);
   } catch (error) {
@@ -96,7 +110,8 @@ const handleJsonMessage = async (jsonMessage) => {
       return await handleStartRecordRequest(jsonMessage);
     case 'stop-record':
       return await handleStopRecordRequest(jsonMessage);
-    default: console.log('handleJsonMessage() unknown action [action:%s]', action);
+    default:
+      console.log('handleJsonMessage() unknown action [action:%s]', action);
   }
 };
 
@@ -111,7 +126,7 @@ const handleCreateTransportRequest = async (jsonMessage) => {
     id: transport.id,
     iceParameters: transport.iceParameters,
     iceCandidates: transport.iceCandidates,
-    dtlsParameters: transport.dtlsParameters
+    dtlsParameters: transport.dtlsParameters,
   };
 };
 
@@ -125,13 +140,15 @@ const handleTransportConnectRequest = async (jsonMessage) => {
   const transport = peer.getTransport(jsonMessage.transportId);
 
   if (!transport) {
-    throw new Error(`Transport with id ${jsonMessage.transportId} was not found`);
+    throw new Error(
+      `Transport with id ${jsonMessage.transportId} was not found`
+    );
   }
 
   await transport.connect({ dtlsParameters: jsonMessage.dtlsParameters });
   console.log('handleTransportConnectRequest() transport connected');
   return {
-    action: 'connect-transport'
+    action: 'connect-transport',
   };
 };
 
@@ -147,22 +164,28 @@ const handleProduceRequest = async (jsonMessage) => {
   const transport = peer.getTransport(jsonMessage.transportId);
 
   if (!transport) {
-    throw new Error(`Transport with id ${jsonMessage.transportId} was not found`);
+    throw new Error(
+      `Transport with id ${jsonMessage.transportId} was not found`
+    );
   }
 
   const producer = await transport.produce({
     kind: jsonMessage.kind,
-    rtpParameters: jsonMessage.rtpParameters
+    rtpParameters: jsonMessage.rtpParameters,
   });
 
   peer.addProducer(producer);
 
-  console.log('handleProducerRequest() new producer added [id:%s, kind:%s]', producer.id, producer.kind);
+  console.log(
+    'handleProducerRequest() new producer added [id:%s, kind:%s]',
+    producer.id,
+    producer.kind
+  );
 
   return {
     action: 'produce',
     id: producer.id,
-    kind: producer.kind
+    kind: producer.kind,
   };
 };
 
@@ -198,7 +221,11 @@ const handleStopRecordRequest = async (jsonMessage) => {
   }
 };
 
-const publishProducerRtpStream = async (peer, producer, ffmpegRtpCapabilities) => {
+const publishProducerRtpStream = async (
+  peer,
+  producer,
+  ffmpegRtpCapabilities
+) => {
   console.log('publishProducerRtpStream()');
 
   // Create the mediasoup RTP Transport used to send media to the GStreamer process
@@ -209,7 +236,11 @@ const publishProducerRtpStream = async (peer, producer, ffmpegRtpCapabilities) =
     rtpTransportConfig.rtcpMux = false;
   }
 
-  const rtpTransport = await createTransport('plain', router, rtpTransportConfig);
+  const rtpTransport = await createTransport(
+    'plain',
+    router,
+    rtpTransportConfig
+  );
 
   // Set the receiver RTP ports
   const remoteRtpPort = await getPort();
@@ -222,12 +253,11 @@ const publishProducerRtpStream = async (peer, producer, ffmpegRtpCapabilities) =
     peer.remotePorts.push(remoteRtcpPort);
   }
 
-
   // Connect the mediasoup RTP transport to the ports used by GStreamer
   await rtpTransport.connect({
     ip: '127.0.0.1',
     port: remoteRtpPort,
-    rtcpPort: remoteRtcpPort
+    rtcpPort: remoteRtcpPort,
   });
 
   peer.addTransport(rtpTransport);
@@ -235,13 +265,13 @@ const publishProducerRtpStream = async (peer, producer, ffmpegRtpCapabilities) =
   const codecs = [];
   // Codec passed to the RTP Consumer must match the codec in the Mediasoup router rtpCapabilities
   const routerCodec = router.rtpCapabilities.codecs.find(
-    codec => codec.kind === producer.kind
+    (codec) => codec.kind === producer.kind
   );
   codecs.push(routerCodec);
 
   const rtpCapabilities = {
     codecs,
-    rtcpFeedback: []
+    rtcpFeedback: [],
   };
 
   // Start the consumer paused
@@ -249,7 +279,7 @@ const publishProducerRtpStream = async (peer, producer, ffmpegRtpCapabilities) =
   const rtpConsumer = await rtpTransport.consume({
     producerId: producer.id,
     rtpCapabilities,
-    paused: true
+    paused: true,
   });
 
   peer.consumers.push(rtpConsumer);
@@ -257,9 +287,11 @@ const publishProducerRtpStream = async (peer, producer, ffmpegRtpCapabilities) =
   return {
     remoteRtpPort,
     remoteRtcpPort,
-    localRtcpPort: rtpTransport.rtcpTuple ? rtpTransport.rtcpTuple.localPort : undefined,
+    localRtcpPort: rtpTransport.rtcpTuple
+      ? rtpTransport.rtcpTuple.localPort
+      : undefined,
     rtpCapabilities,
-    rtpParameters: rtpConsumer.rtpParameters
+    rtpParameters: rtpConsumer.rtpParameters,
   };
 };
 
@@ -300,11 +332,14 @@ const getProcess = (recordInfo) => {
     await initializeWorkers();
     router = await createRouter();
 
-    httpsServer.listen(SERVER_PORT, () =>
-      console.log('Socket Server listening on port %d', SERVER_PORT)
-    );
+    // httpsServer.listen(SERVER_PORT, () =>
+    //   console.log('Socket Server listening on port %d', SERVER_PORT)
+    // );
   } catch (error) {
-    console.error('Failed to initialize application [error:%o] destroying in 2 seconds...', error);
+    console.error(
+      'Failed to initialize application [error:%o] destroying in 2 seconds...',
+      error
+    );
     setTimeout(() => process.exit(1), 2000);
   }
 })();

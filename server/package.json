@@ -10,6 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "express": "^4.17.1",
+    "ffmpeg-static": "^4.2.7",
     "mediasoup": "^3.4.8",
     "shelljs": "^0.8.3",
     "uuid": "^3.4.0",
