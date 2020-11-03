@@ -9,7 +9,7 @@ const mediasoupConfig = require('../../server/src/config');
 let peer;
 const queue = new SocketQueue();
 
-const socket = new WebSocket(`wss://${window.location.hostname}:3000`);
+const socket = new WebSocket(`ws://${window.location.hostname}:3000`);
 
 const handleSocketOpen = async () => {
   console.log('handleSocketOpen()');
@@ -32,27 +32,28 @@ const handleSocketClose = () => {
 
 const getVideoCodecs = () => {
   let params = new URLSearchParams(location.search.slice(1));
-  let videoCodec = params.get('videocodec')
-  const codec = mediasoupConfig.router.mediaCodecs.find(c=>{
-    if (!videoCodec)
-      return undefined;
+  let videoCodec = params.get('videocodec');
+  const codec = mediasoupConfig.router.mediaCodecs.find((c) => {
+    if (!videoCodec) return undefined;
 
-    return ~c.mimeType.toLowerCase().indexOf(videoCodec.toLowerCase())
+    return ~c.mimeType.toLowerCase().indexOf(videoCodec.toLowerCase());
   });
-  return codec !== undefined ? codec : {
-                                        kind: 'video',
-                                        mimeType: 'video/H264',
-                                        clockRate: 90000,
-                                        parameters: {
-                                          'packetization-mode': 1,
-                                          'profile-level-id': '4d0032',
-                                          'level-asymmetry-allowed': 1,
-                                          'x-google-start-bitrate': 1000
-                                        }
-                                      };
-}
+  return codec !== undefined
+    ? codec
+    : {
+        kind: 'video',
+        mimeType: 'video/H264',
+        clockRate: 90000,
+        parameters: {
+          'packetization-mode': 1,
+          'profile-level-id': '4d0032',
+          'level-asymmetry-allowed': 1,
+          'x-google-start-bitrate': 1000,
+        },
+      };
+};
 
-const handleSocketError = error => {
+const handleSocketError = (error) => {
   console.error('handleSocketError() [error:%o]', error);
 };
 
@@ -72,13 +73,17 @@ const handleJsonMessage = async (jsonMessage) => {
     case 'produce':
       handleProduceRequest(jsonMessage);
       break;
-    default: console.log('handleJsonMessage() unknown action %s', action);
+    default:
+      console.log('handleJsonMessage() unknown action %s', action);
   }
 };
 
 const handleRouterRtpCapabilitiesRequest = async (jsonMessage) => {
   const { routerRtpCapabilities, sessionId } = jsonMessage;
-  console.log('handleRouterRtpCapabilities() [rtpCapabilities:%o]', routerRtpCapabilities);
+  console.log(
+    'handleRouterRtpCapabilities() [rtpCapabilities:%o]',
+    routerRtpCapabilities
+  );
 
   try {
     const device = new mediasoup.Device();
@@ -88,7 +93,10 @@ const handleRouterRtpCapabilitiesRequest = async (jsonMessage) => {
     peer = new Peer(sessionId, device);
     createTransport();
   } catch (error) {
-    console.error('handleRouterRtpCapabilities() failed to init device [error:%o]', error);
+    console.error(
+      'handleRouterRtpCapabilities() failed to init device [error:%o]',
+      error
+    );
     socket.close();
   }
 };
@@ -101,10 +109,12 @@ const createTransport = () => {
   }
 
   // First we must create the mediasoup transport on the server side
-  socket.send(JSON.stringify({
-    action: 'create-transport',
-    sessionId: peer.sessionId
-  }));
+  socket.send(
+    JSON.stringify({
+      action: 'create-transport',
+      sessionId: peer.sessionId,
+    })
+  );
 };
 
 // Mediasoup Transport on the server side has been created
@@ -114,13 +124,19 @@ const handleCreateTransportRequest = async (jsonMessage) => {
   try {
     // Create the local mediasoup send transport
     peer.sendTransport = await peer.device.createSendTransport(jsonMessage);
-    console.log('handleCreateTransportRequest() send transport created [id:%s]', peer.sendTransport.id);
+    console.log(
+      'handleCreateTransportRequest() send transport created [id:%s]',
+      peer.sendTransport.id
+    );
 
     // Set the transport listeners and get the users media stream
     handleSendTransportListeners();
     getMediaStream();
   } catch (error) {
-    console.error('handleCreateTransportRequest() failed to create transport [error:%o]', error);
+    console.error(
+      'handleCreateTransportRequest() failed to create transport [error:%o]',
+      error
+    );
     socket.close();
   }
 };
@@ -128,8 +144,11 @@ const handleCreateTransportRequest = async (jsonMessage) => {
 const handleSendTransportListeners = () => {
   peer.sendTransport.on('connect', handleTransportConnectEvent);
   peer.sendTransport.on('produce', handleTransportProduceEvent);
-  peer.sendTransport.on('connectionstatechange', connectionState => {
-    console.log('send transport connection state change [state:%s]', connectionState);
+  peer.sendTransport.on('connectionstatechange', (connectionState) => {
+    console.log(
+      'send transport connection state change [state:%s]',
+      connectionState
+    );
   });
 };
 
@@ -144,16 +163,20 @@ const getMediaStream = async () => {
 
   // If there is a video track start sending it to the server
   if (videoTrack) {
+    console.log(`getVideoCodecs():`, getVideoCodecs());
 
-    console.log(`getVideoCodecs():`, getVideoCodecs())
-
-    const videoProducer = await peer.sendTransport.produce({ track: videoTrack, codec: getVideoCodecs() });
+    const videoProducer = await peer.sendTransport.produce({
+      track: videoTrack,
+      codec: getVideoCodecs(),
+    });
     peer.producers.push(videoProducer);
   }
 
   // if there is a audio track start sending it to the server
   if (audioTrack) {
-    const audioProducer = await peer.sendTransport.produce({ track: audioTrack });
+    const audioProducer = await peer.sendTransport.produce({
+      track: audioTrack,
+    });
     peer.producers.push(audioProducer);
   }
 
@@ -202,36 +225,47 @@ const handleTransportConnectEvent = ({ dtlsParameters }, callback, errback) => {
 
     queue.push('connect-transport', action);
 
-    socket.send(JSON.stringify({
-      action: 'connect-transport',
-      sessionId: peer.sessionId,
-      transportId: peer.sendTransport.id,
-      dtlsParameters
-    }));
+    socket.send(
+      JSON.stringify({
+        action: 'connect-transport',
+        sessionId: peer.sessionId,
+        transportId: peer.sendTransport.id,
+        dtlsParameters,
+      })
+    );
   } catch (error) {
     console.error('handleTransportConnectEvent() failed [error:%o]', error);
     errback(error);
   }
 };
 
-const handleTransportProduceEvent = ({ kind, rtpParameters }, callback, errback) => {
+const handleTransportProduceEvent = (
+  { kind, rtpParameters },
+  callback,
+  errback
+) => {
   console.log('handleTransportProduceEvent()');
   try {
-    const action = jsonMessage => {
-      console.log('handleTransportProduceEvent callback [data:%o]', jsonMessage);
+    const action = (jsonMessage) => {
+      console.log(
+        'handleTransportProduceEvent callback [data:%o]',
+        jsonMessage
+      );
       callback({ id: jsonMessage.id });
       queue.remove('produce');
     };
 
     queue.push('produce', action);
 
-    socket.send(JSON.stringify({
-      action: 'produce',
-      sessionId: peer.sessionId,
-      transportId: peer.sendTransport.id,
-      kind,
-      rtpParameters
-    }));
+    socket.send(
+      JSON.stringify({
+        action: 'produce',
+        sessionId: peer.sessionId,
+        transportId: peer.sendTransport.id,
+        kind,
+        rtpParameters,
+      })
+    );
   } catch (error) {
     console.error('handleTransportProduceEvent() failed [error:%o]', error);
     errback(error);
@@ -246,10 +280,12 @@ socket.addEventListener('close', handleSocketClose);
 module.exports.startRecord = () => {
   console.log('startRecord()');
 
-  socket.send(JSON.stringify({
-    action: 'start-record',
-    sessionId: peer.sessionId,
-  }));
+  socket.send(
+    JSON.stringify({
+      action: 'start-record',
+      sessionId: peer.sessionId,
+    })
+  );
 
   document.getElementById('startRecordButton').disabled = true;
   document.getElementById('stopRecordButton').disabled = false;
@@ -258,10 +294,12 @@ module.exports.startRecord = () => {
 module.exports.stopRecord = () => {
   console.log('stopRecord()');
 
-  socket.send(JSON.stringify({
-    action: 'stop-record',
-    sessionId: peer.sessionId
-  }));
+  socket.send(
+    JSON.stringify({
+      action: 'stop-record',
+      sessionId: peer.sessionId,
+    })
+  );
 
   document.getElementById('startRecordButton').disabled = false;
   document.getElementById('stopRecordButton').disabled = true;

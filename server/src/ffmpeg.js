@@ -19,6 +19,7 @@ module.exports = class FFmpeg {
   }
 
   _createProcess() {
+    const startTime = Date.now();
     const sdpString = createSdpText(this._rtpParameters);
     const sdpStream = convertStringToStream(sdpString);
 
@@ -26,20 +27,23 @@ module.exports = class FFmpeg {
 
     this._process = child_process.spawn(FFmpegStatic, this._commandArgs);
 
+    const dataHandler = (data) => {
+      console.log(
+        `[${Date.now() - startTime}]ffmpeg::process::data [data:%o]`,
+        data
+      );
+    };
+
     if (this._process.stderr) {
       this._process.stderr.setEncoding('utf-8');
 
-      this._process.stderr.on('data', (data) =>
-        console.log('ffmpeg::process::data [data:%o]', data)
-      );
+      this._process.stderr.on('data', dataHandler);
     }
 
     if (this._process.stdout) {
       this._process.stdout.setEncoding('utf-8');
 
-      this._process.stdout.on('data', (data) =>
-        console.log('ffmpeg::process::data [data:%o]', data)
-      );
+      this._process.stdout.on('data', dataHandler);
     }
 
     this._process.on('message', (message) =>

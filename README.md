@@ -12,7 +12,6 @@ File names are simply the current timestamp
 
 This sample currently only uses VP8/opus and the output file is .webm
 
-
 ---
 
 ## How to use
@@ -62,8 +61,8 @@ npm run dev
 ```
 
 ### Access the sample page
-https://localhost:8080
 
+http://localhost:3000
 
 By default recorded videos will be available in `server/files` directory.
 
@@ -71,12 +70,12 @@ By default recorded videos will be available in `server/files` directory.
 
 ## Server ENV Options
 
-| Argument | Type | Explanation |
-| -------- | :--: | :---------: |
-| RECORD_FILE_LOCATION_PATH | string | Path to store the recorded files (user running node MUST have read/write permission) |
-| GSTREAMER_DEBUG_LEVEL | number | GStreamer Debug Level (GStreamer only) |
-| PROCESS_NAME | string | The command to use (GStreamer/FFmpeg) (case sensitive) default is FFmpeg |
-| SERVER_PORT | number | Server port number (default is 3000). Note if you change this you will also need to edit the WebSocket connection url. |
+| Argument                  |  Type  |                                                      Explanation                                                       |
+| ------------------------- | :----: | :--------------------------------------------------------------------------------------------------------------------: |
+| RECORD_FILE_LOCATION_PATH | string |                  Path to store the recorded files (user running node MUST have read/write permission)                  |
+| GSTREAMER_DEBUG_LEVEL     | number |                                         GStreamer Debug Level (GStreamer only)                                         |
+| PROCESS_NAME              | string |                        The command to use (GStreamer/FFmpeg) (case sensitive) default is FFmpeg                        |
+| SERVER_PORT               | number | Server port number (default is 3000). Note if you change this you will also need to edit the WebSocket connection url. |
 
 ---
 
