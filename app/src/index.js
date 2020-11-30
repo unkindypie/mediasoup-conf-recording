@@ -8,6 +8,7 @@ const mediasoupConfig = require('../../server/src/config');
 
 let peer;
 const queue = new SocketQueue();
+let videoTrack;
 
 const socket = new WebSocket(`ws://${window.location.hostname}:3000`);
 
@@ -158,7 +159,7 @@ const getMediaStream = async () => {
   videoNode.srcObject = mediaStream;
 
   // Get the video and audio tracks from the media stream
-  const videoTrack = mediaStream.getVideoTracks()[0];
+  videoTrack = mediaStream.getVideoTracks()[0];
   const audioTrack = mediaStream.getAudioTracks()[0];
 
   // If there is a video track start sending it to the server
@@ -288,6 +289,7 @@ module.exports.startRecord = () => {
   );
 
   document.getElementById('startRecordButton').disabled = true;
+  document.getElementById('switchActive').disabled = false;
   document.getElementById('stopRecordButton').disabled = false;
 };
 
@@ -303,4 +305,26 @@ module.exports.stopRecord = () => {
 
   document.getElementById('startRecordButton').disabled = false;
   document.getElementById('stopRecordButton').disabled = true;
+};
+
+module.exports.switchActive = () => {
+  console.log('switchActive()');
+
+  socket.send(
+    JSON.stringify({
+      action: 'switch-active',
+      sessionId: peer.sessionId,
+    })
+  );
+
+  document.getElementById('startRecordButton').disabled = true;
+  document.getElementById('switchActive').disabled = true;
+  document.getElementById('stopRecordButton').disabled = false;
+};
+
+module.exports.toggleVideo = () => {
+  if (videoTrack) {
+    console.log('toggling video track...');
+    videoTrack.enabled = !videoTrack.enabled;
+  }
 };

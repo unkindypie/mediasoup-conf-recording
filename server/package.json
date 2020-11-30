@@ -4,7 +4,8 @@
   "description": "",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server"
+    "start": "node src/server",
+    "dev": "nodemon src/server"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +16,10 @@
     "mediasoup": "^3.4.8",
     "shelljs": "^0.8.3",
     "uuid": "^3.4.0",
-    "ws": "^7.2.1"
+    "ws": "^7.2.1",
+    "zeromq": "^6.0.0-beta.6"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.6"
   }
 }

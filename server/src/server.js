@@ -104,6 +104,8 @@ const handleJsonMessage = async (jsonMessage) => {
       return await handleProduceRequest(jsonMessage);
     case 'start-record':
       return await handleStartRecordRequest(jsonMessage);
+    case 'switch-active':
+      return await handleSwitchActive(jsonMessage);
     case 'stop-record':
       return await handleStopRecordRequest(jsonMessage);
     default:
@@ -194,6 +196,17 @@ const handleStartRecordRequest = async (jsonMessage) => {
   }
 
   startRecord(peer);
+};
+
+const handleSwitchActive = async (jsonMessage) => {
+  console.log('handleSwitchActive() [data:%o]', jsonMessage);
+  const peer = peers.get(jsonMessage.sessionId);
+
+  if (!peer) {
+    throw new Error(`Peer with id ${jsonMessage.sessionId} was not found`);
+  }
+
+  switchActive(peer);
 };
 
 const handleStopRecordRequest = async (jsonMessage) => {
@@ -291,24 +304,60 @@ const publishProducerRtpStream = async (
   };
 };
 
-const startRecord = async (peer) => {
-  let recordInfo = {};
+const startRecord = async (peerThatStartedRecord) => {
+  const recordInfo = {
+    peers: new Map(),
+  };
 
-  for (const producer of peer.producers) {
-    recordInfo[producer.kind] = await publishProducerRtpStream(peer, producer);
+  // let tog = true;
+  for (let _p of peers) {
+    // if (tog) {
+    //   tog = false;
+    //   continue;
+    // }
+    const peer = _p[1];
+    const peerId = _p[0];
+    const peerRecordData = {};
+    for (const producer of peer.producers) {
+      peerRecordData[producer.kind] = await publishProducerRtpStream(
+        peer,
+        producer
+      );
+    }
+    recordInfo.peers.set(peerId, peerRecordData);
   }
-
   recordInfo.fileName = Date.now().toString();
+  console.log(recordInfo);
 
-  peer.process = getProcess(recordInfo);
+  peerThatStartedRecord.process = getProcess(recordInfo);
 
   setTimeout(async () => {
-    for (const consumer of peer.consumers) {
-      // Sometimes the consumer gets resumed before the GStreamer process has fully started
-      // so wait a couple of seconds
-      await consumer.resume();
+    for (let _p of peers) {
+      const peer = _p[1];
+      for (const consumer of peer.consumers) {
+        // Sometimes the consumer gets resumed before the GStreamer process has fully started
+        // so wait a couple of seconds
+        await consumer.resume();
+        console.log(
+          `[${peer.sessionId}]resuming ${consumer.id}[${consumer.kind}]: `,
+          Date.now()
+        );
+      }
     }
   }, 1000);
+};
+
+const switchActive = async (peer) => {
+  let originalPeer;
+  for (let p of peers) {
+    if (p[0] !== peer.sessionId) {
+      originalPeer = p[1];
+      break;
+    }
+  }
+  // console.log(ori)
+  if (originalPeer) {
+  }
 };
 
 // Returns process command to use (GStreamer/FFmpeg) default is FFmpeg

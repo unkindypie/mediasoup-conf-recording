@@ -5,7 +5,6 @@ const { EventEmitter } = require('events');
 const FFmpegStatic = require('ffmpeg-static');
 
 const { createSdpText } = require('./sdp');
-const { convertStringToStream } = require('./utils');
 
 const RECORD_FILE_LOCATION_PATH =
   process.env.RECORD_FILE_LOCATION_PATH || './files';
@@ -20,16 +19,27 @@ module.exports = class FFmpeg {
 
   _createProcess() {
     const startTime = Date.now();
-    const sdpString = createSdpText(this._rtpParameters);
-    const sdpStream = convertStringToStream(sdpString);
 
-    console.log('createProcess() [sdpString:%s]', sdpString);
+    // generating sdp for each stream
+    for (let p of this._rtpParameters.peers) {
+      const peer = p[1];
+      const peerId = p[0];
+
+      const sdpString = createSdpText(peer);
+      peer.sdpString = sdpString;
+      console.log(
+        `createSdpText() for [${peerId}] with [sdpString:%s]`,
+        sdpString
+      );
+    }
 
     this._process = child_process.spawn(FFmpegStatic, this._commandArgs);
 
     const dataHandler = (data) => {
       console.log(
-        `[${Date.now() - startTime}]ffmpeg::process::data [data:%o]`,
+        `[${Date.now()}:${
+          Date.now() - startTime
+        }]ffmpeg::process::data [data:%o]`,
         data
       );
     };
@@ -58,14 +68,6 @@ module.exports = class FFmpeg {
       console.log('ffmpeg::process::close');
       this._observer.emit('process-close');
     });
-
-    sdpStream.on('error', (error) =>
-      console.error('sdpStream::error [error:%o]', error)
-    );
-
-    // Pipe sdp stream to the ffmpeg process
-    sdpStream.resume();
-    sdpStream.pipe(this._process.stdin);
   }
 
   kill() {
@@ -74,27 +76,51 @@ module.exports = class FFmpeg {
   }
 
   get _commandArgs() {
+    let inputs = [];
+
+    this._rtpParameters.peers.forEach((p, i) => {
+      console.log('PEER joined at ' + p.joinedAt);
+      // if (i === 0) return;
+      console.log('generating input for ', i);
+      inputs = [
+        ...inputs,
+        '-protocol_whitelist',
+        'data,rtp,udp',
+        '-fflags',
+        '+genpts',
+        '-f',
+        'sdp',
+        '-i',
+        `data:application/sdp;charset=UTF-8,${p.sdpString}`,
+      ];
+      console.log('sdp:', p.sdpString);
+    });
+
     let commandArgs = [
       '-loglevel',
       'debug',
+      // '-nostdin',
+
+      ...inputs,
       '-protocol_whitelist',
-      'pipe,udp,rtp',
-      '-fflags',
-      '+genpts',
-      '-f',
-      'sdp',
-      '-i',
-      'pipe:0',
-    ];
+      'data,rtp,udp,file',
+      '-filter_complex',
+      // '[0:v][1:v]hstack=inputs=2:shortest=1[v];[0:a][1:a]amerge=inputs=2[a]',
 
-    commandArgs = commandArgs.concat(this._videoArgs);
-    commandArgs = commandArgs.concat(this._audioArgs);
+      // '[0:v][0:v]hstack=inputs=2:shortest=1[v];[0:a][0:a]amerge=inputs=2[a]',
+      // '[0:v][0:v]hstack=inputs=2:shortest=1[v]', // - works
+      '[0:v][0:v]hstack=inputs=2:shortest=1[v];amix=inputs=1[a]', // - works
+      // '[0:v][1:v]hstack=inputs=2:shortest=1[v];amix=inputs=2[a]',
+      // '[0:v][1:v]hstack=inputs=2:shortest=1[v];',
 
-    commandArgs = commandArgs.concat([
+      ...this._videoArgs,
+      ...this._audioArgs,
+
       '-flags',
       '+global_header',
+      // '-shortest',
       `${RECORD_FILE_LOCATION_PATH}/${this._rtpParameters.fileName}.webm`,
-    ]);
+    ];
 
     console.log('commandArgs:%o', commandArgs);
 
@@ -102,19 +128,19 @@ module.exports = class FFmpeg {
   }
 
   get _videoArgs() {
-    return ['-map', '0:v:0', '-c:v', 'copy'];
-    // return ['-map', '[v]'];
+    // return ['-map', '0:v:0', '-c:v', 'copy'];
+    return ['-map', '[v]'];
   }
 
   get _audioArgs() {
-    return [
-      '-map',
-      '0:a:0',
-      '-strict', // libvorbis is experimental
-      '-2',
-      '-c:a',
-      'copy',
-    ];
-    // return ['-map', '[a]'];
+    // return [
+    //   '-map',
+    //   '0:a:0',
+    //   '-strict', // libvorbis is experimental
+    //   '-2',
+    //   '-c:a',
+    //   'copy',
+    // ];
+    return ['-map', '[a]'];
   }
 };

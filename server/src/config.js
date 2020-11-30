@@ -6,7 +6,7 @@ module.exports = Object.freeze({
   numWorkers: Object.keys(os.cpus()).length,
   worker: {
     logLevel: 'debug',
-    logTags: ['rtp', 'srtp', 'rtcp'],
+    logTags: ['rtp', 'srtp', 'rtcp', 'info', 'ice', 'dtls'],
     rtcMinPort: 40000,
     rtcMaxPort: 49999,
   },
