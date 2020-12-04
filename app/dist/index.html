@@ -15,16 +15,19 @@
       height="480"
     ></video>
     <br />
+    <label>(starts record for everyone who is connected to the server)</label>
     <button id="startRecordButton" onclick="Lib.startRecord()" disabled>
       Start New Record
     </button>
-    <button id="switchActive" onclick="Lib.switchActive()" disabled>
+    <!-- <button id="switchActive" onclick="Lib.switchActive()" disabled>
       Switch active
-    </button>
+    </button> -->
     <button id="stopRecordButton" onclick="Lib.stopRecord()" disabled>
       Stop Record
     </button>
-    <button id="toggleVideo" onclick="Lib.toggleVideo()">Toggle video</button>
+    <button id="toggleVideo" onclick="Lib.toggleVideo()">
+      Toggle audio & video
+    </button>
   </body>
 
   <script>
