@@ -344,7 +344,7 @@ const startRecord = async (peerThatStartedRecord) => {
         );
       }
     }
-  }, 1000);
+  }, 3000);
 };
 
 const switchActive = async (peer) => {

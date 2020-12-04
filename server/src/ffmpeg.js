@@ -3,6 +3,8 @@
 const child_process = require('child_process');
 const { EventEmitter } = require('events');
 const FFmpegStatic = require('ffmpeg-static');
+const fs = require('fs');
+const path = require('path');
 
 const { createSdpText } = require('./sdp');
 
@@ -15,6 +17,13 @@ module.exports = class FFmpeg {
     this._process = undefined;
     this._observer = new EventEmitter();
     this._createProcess();
+
+    const logsPath = path.join(
+      __dirname,
+      `../logs/ffmpeg-log-${Date.now()}.txt`
+    );
+
+    this._fileLog = fs.createWriteStream(logsPath, { flags: 'a' });
   }
 
   _createProcess() {
@@ -33,7 +42,11 @@ module.exports = class FFmpeg {
       );
     }
 
-    this._process = child_process.spawn(FFmpegStatic, this._commandArgs);
+    const commandArgs = this._commandArgs;
+
+    console.log(`ffmpeg command: \n ${commandArgs}`);
+
+    this._process = child_process.spawn(FFmpegStatic, commandArgs);
 
     const dataHandler = (data) => {
       console.log(
@@ -42,6 +55,7 @@ module.exports = class FFmpeg {
         }]ffmpeg::process::data [data:%o]`,
         data
       );
+      this._fileLog.write(data);
     };
 
     if (this._process.stderr) {
@@ -56,17 +70,20 @@ module.exports = class FFmpeg {
       this._process.stdout.on('data', dataHandler);
     }
 
-    this._process.on('message', (message) =>
-      console.log('ffmpeg::process::message [message:%o]', message)
-    );
+    this._process.on('message', (message) => {
+      console.log('ffmpeg::process::message [message:%o]', message);
+      this._fileLog.write(message);
+    });
 
-    this._process.on('error', (error) =>
-      console.error('ffmpeg::process::error [error:%o]', error)
-    );
+    this._process.on('error', (error) => {
+      console.error('ffmpeg::process::error [error:%o]', error);
+      this._fileLog.write(message);
+    });
 
     this._process.once('close', () => {
       console.log('ffmpeg::process::close');
       this._observer.emit('process-close');
+      this._fileLog.write('close.');
     });
   }
 
@@ -84,10 +101,16 @@ module.exports = class FFmpeg {
       console.log('generating input for ', i);
       inputs = [
         ...inputs,
+        // '-analyzeduration',
+        // '9000000',
+        // '-probesize',
+        // '10000000',
         '-protocol_whitelist',
         'data,rtp,udp',
         '-fflags',
         '+genpts',
+        // '-s:v',
+        // '640x480',
         '-f',
         'sdp',
         '-i',
@@ -109,7 +132,9 @@ module.exports = class FFmpeg {
 
       // '[0:v][0:v]hstack=inputs=2:shortest=1[v];[0:a][0:a]amerge=inputs=2[a]',
       // '[0:v][0:v]hstack=inputs=2:shortest=1[v]', // - works
-      '[0:v][0:v]hstack=inputs=2:shortest=1[v];amix=inputs=1[a]', // - works
+      // '[0:v][0:v]hstack=inputs=2:shortest=1[v];amix=inputs=1[a]', // - works
+      'amix=inputs=2[a]', // - works
+      // '[0:v]pad=iw*2:ih[int];[int][1:v]overlay=W/2:0[vid];amix=inputs=2[a]',
       // '[0:v][1:v]hstack=inputs=2:shortest=1[v];amix=inputs=2[a]',
       // '[0:v][1:v]hstack=inputs=2:shortest=1[v];',
 
@@ -129,7 +154,9 @@ module.exports = class FFmpeg {
 
   get _videoArgs() {
     // return ['-map', '0:v:0', '-c:v', 'copy'];
-    return ['-map', '[v]'];
+    // return ['-map', '[v]'];
+    return [];
+    // return ['-map', '[vid]'];
   }
 
   get _audioArgs() {
